@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "pirated-pixels-platform"
+version = "0.1.0"
+description = ""
+authors = ["Ajay Ratnam <ajratnam.dev@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+paramiko = "^3.4.0"
+blessed = "^1.20.0"
+rich = "^13.7.1"
+python-dotenv = "^1.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
