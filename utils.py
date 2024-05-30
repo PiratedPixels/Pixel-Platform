@@ -1,4 +1,7 @@
 import inspect
+import threading
+
+lock = threading.Lock()
 
 
 def draw(pos, text):
@@ -6,9 +9,11 @@ def draw(pos, text):
     chan = bf.f_locals["chan"]
     terminal = bf.f_globals["term"]
 
+    lock.acquire()
     send(terminal.move_yx(*pos))
     send(terminal.clear_eol())
     send(text)
+    lock.release()
 
 
 def send(text):
