@@ -86,7 +86,6 @@ def start_server():
             continue
 
         lib = importlib.reload(ssh_tui)
-
         threading.Thread(target=lib.handle_client, args=(chan,), daemon=True).start()
 
     server_socket.close()
