@@ -88,18 +88,30 @@ def parse_mouse_event(sequence):
 #         send(MOUSE_CLICK_DISABLE)
 #         chan.close()
 
+def receive_input(chan, layout):
+    while layout.running:
+        data = chan.recv(1024).decode('utf-8')
+        if data.strip().lower() == "q" and layout.active_input_index is None:
+            layout.running = False
+            break
+        layout.handle_input(data)
+
+
 def handle_client(chan):
     layout = Layout(chan, term)
 
-    layout.add_label('Welcome to the Pixel Platform! Please login to continue.', term.red)
+    layout.add_label(term.bold('Welcome to the Pixel Platform! Please login to continue.'), term.red)
     layout.add_gap(1)
-    layout.add_label("Username - ", term.color_rgb(122, 127, 255))
-    layout.add_label("Password - ", term.blue)
+
+    layout.add_input("Username - ", "Enter your username", prompt_format=term.color_rgb(122, 127, 255))
+    layout.add_input("Password - ", "Enter your password", hidden=True, prompt_format=term.blue)
+
     layout.add_gap(1)
-    layout.add_label('Press Q to Quit', term.pink)
+    layout.add_label('Press Q to Quit', term.cyan)
+
+    layout.running = True
+    Thread(target=receive_input, args=(chan, layout)).start()
 
     with layout:
-        while True:
+        while layout.running:
             layout.draw()
-            if chan.recv(1024).decode('utf-8').strip().lower() == "q":
-                break
