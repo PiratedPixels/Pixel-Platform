@@ -208,9 +208,8 @@ class Layout:
     def init(self):
         pos, old_pos = [0, 0], 0
         for i, element in enumerate(self.elements):
-            print(element, pos, old_pos)
             if isinstance(element, Label):
-                element.pos = pos
+                element.pos = pos.copy()
                 element.draw()
             elif isinstance(element, HGap):
                 pos[0] += element.count - 1
@@ -229,7 +228,7 @@ class Layout:
                         break
                 continue
             elif isinstance(element, Input):
-                element.pos = pos
+                element.pos = pos.copy()
                 element.draw()
 
             pos[0] += 1
