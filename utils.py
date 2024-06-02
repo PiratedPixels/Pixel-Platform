@@ -90,6 +90,13 @@ class VGap:
         self.count = count
 
 
+class VPos:
+    pos = [0, 0]
+
+    def __init__(self, count=1):
+        self.count = count
+
+
 class UnBreak:
     pos = [0, 0]
 
@@ -210,6 +217,9 @@ class Layout:
             elif isinstance(element, VGap):
                 pos[1] += element.count
                 continue
+            elif isinstance(element, VPos):
+                pos[1] = element.count
+                continue
             elif isinstance(element, UnBreak):
                 pos[0] -= 1
                 for elm in self.elements[i-1::-1]:
@@ -281,6 +291,10 @@ class Layout:
                     self.elements.append(VGap(int(value)))
                 elif key == "padding-right":
                     appendings.append(VGap(int(value)))
+                elif key == "margin-left":
+                    self.elements.append(VPos(int(value)))
+                elif key == "margin-right":
+                    appendings.append(VPos(int(value)))
                 elif key == "inline":
                     if value:
                         self.elements.append(UnBreak())
