@@ -1,11 +1,11 @@
 import re
-import time
 from threading import Thread
 
 from blessed import Terminal
-from utils import draw, send, Layout
+from utils import Layout
 
 term = Terminal()
+term.rgb = term.color_rgb
 
 
 def parse_mouse_event(sequence):
