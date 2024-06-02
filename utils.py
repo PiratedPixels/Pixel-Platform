@@ -56,6 +56,9 @@ class UIText:
             text = color(text)
         return text
 
+    def __len__(self):
+        return len(self.text)
+
     def __str__(self):
         return self.apply(self.text)
 
@@ -76,6 +79,10 @@ class HGap:
         self.count = count
 
 
+class Displayable:
+    pass
+
+
 class VGap:
     pos = [0, 0]
 
@@ -83,7 +90,11 @@ class VGap:
         self.count = count
 
 
-class Label:
+class UnBreak:
+    pos = [0, 0]
+
+
+class Label(Displayable):
     pos = [0, 0]
 
     def __init__(self, channel, terminal, text):
@@ -94,8 +105,11 @@ class Label:
     def draw(self):
         draw(self.pos, self.text, self.channel, self.terminal)
 
+    def __len__(self):
+        return len(self.text)
 
-class Input:
+
+class Input(Displayable):
     pos = [0, 0]
 
     def __init__(self, channel, terminal, prompt, placeholder=UIText(""), hidden=False):
@@ -109,6 +123,9 @@ class Input:
         self._cursor = 0
         self._cursor_pos = None
         self._text = []
+
+    def __len__(self):
+        return len(self.prompt) + len(self.text) + 1
 
     @property
     def cursor(self):
@@ -135,8 +152,7 @@ class Input:
     def apply_format(self, text):
         apply = self.text.apply
         text = text.text
-        return apply(text[:self.cursor_pos]) + self.cursor + apply(text[self.cursor_pos:]) if self.active else apply(
-            text)
+        return apply(text[:self.cursor_pos]) + self.cursor + apply(text[self.cursor_pos:]) if self.active else apply(text)
 
     def draw(self):
         prompt = self.prompt
@@ -183,22 +199,31 @@ class Layout:
             self.active_input_index = None
 
     def init(self):
-        pos = [0, 0]
-        for element in self.elements:
+        pos, old_pos = [0, 0], 0
+        for i, element in enumerate(self.elements):
+            print(element, pos, old_pos)
             if isinstance(element, Label):
                 element.pos = pos
                 element.draw()
             elif isinstance(element, HGap):
                 pos[0] += element.count - 1
             elif isinstance(element, VGap):
-                pos[1] += element.count + 1
+                pos[1] += element.count
+                continue
+            elif isinstance(element, UnBreak):
                 pos[0] -= 1
+                for elm in self.elements[i-1::-1]:
+                    if isinstance(elm, Displayable):
+                        if elm.pos[0] == pos[0]:
+                            pos[1] += old_pos + len(elm)
+                        break
                 continue
             elif isinstance(element, Input):
                 element.pos = pos
                 element.draw()
 
             pos[0] += 1
+            old_pos = pos[1]
             pos[1] = 0
 
     def draw(self):
@@ -256,6 +281,9 @@ class Layout:
                     self.elements.append(VGap(int(value)))
                 elif key == "padding-right":
                     appendings.append(VGap(int(value)))
+                elif key == "inline":
+                    if value:
+                        self.elements.append(UnBreak())
                 elif key not in inspect.signature(field.__init__).parameters:
                     raise ValueError(f"Property {key} not found in {field}")
                 else:
