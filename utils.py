@@ -132,9 +132,10 @@ class Input:
         elif data == '\x1b[3~':
             if 0 <= self.cursor_pos + 1 <= len(self._text):
                 self._text.pop(self.cursor_pos)
-        elif len(data) == 1:
-            self._text.insert(self.cursor_pos, data)
-            self.cursor_pos += 1
+        elif data.isprintable():
+            for char in data[::-1]:
+                self._text.insert(self.cursor_pos, char)
+            self.cursor_pos += len(data)
 
 
 class Layout:
