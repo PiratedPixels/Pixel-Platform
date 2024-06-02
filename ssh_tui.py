@@ -8,23 +8,6 @@ term = Terminal()
 term.rgb = term.color_rgb
 
 
-def parse_mouse_event(sequence):
-    pattern = r'\x1b\[<(\d+);(\d+);(\d+)([Mm])'
-    match = re.match(pattern, sequence)
-    if match:
-        button_code = int(match.group(1))
-        x = int(match.group(2))
-        y = int(match.group(3))
-        event_type = 'press' if match.group(4) == 'M' else 'release'
-        return {
-            'button_code': button_code,
-            'x': x,
-            'y': y,
-            'event_type': event_type
-        }
-    return None
-
-
 # def handle_client2(chan):
 #     options = ["Username - ", "Password - "]
 #     values = ["", ""]

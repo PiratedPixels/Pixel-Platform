@@ -6,6 +6,7 @@ import time
 lock = threading.Lock()
 MOUSE_CLICK_ENABLE = "\x1b[?1000h\x1b[?1006h"
 MOUSE_CLICK_DISABLE = "\x1b[?1000l\x1b[?1006l"
+MOUSE_PATTERN = re.compile(r'\x1b\[<(\d+);(\d+);(\d+)([Mm])')
 FIELD_PARSER = re.compile('^(.*? {\n.*?})$', re.DOTALL | re.MULTILINE)
 PROPS_PARSER = re.compile(r'\s*.*?\n')
 FPS = 20
@@ -20,6 +21,21 @@ def draw(pos, text, channel, terminal):
 
 def send(text, channel):
     channel.send(str(text))
+
+
+def parse_mouse_event(sequence):
+    if match := MOUSE_PATTERN.match(sequence):
+        button_code = int(match.group(1))
+        x = int(match.group(2))
+        y = int(match.group(3))
+        event_type = 'press' if match.group(4) == 'M' else 'release'
+        return {
+            'button_code': button_code,
+            'x': x,
+            'y': y,
+            'event_type': event_type
+        }
+    return None
 
 
 class UIText:
@@ -53,15 +69,22 @@ class UIText:
         return UIText(other + str(self))
 
 
-class Gap:
-    pos = 0
+class HGap:
+    pos = [0, 0]
+
+    def __init__(self, count=1):
+        self.count = count
+
+
+class VGap:
+    pos = [0, 0]
 
     def __init__(self, count=1):
         self.count = count
 
 
 class Label:
-    pos = 0
+    pos = [0, 0]
 
     def __init__(self, channel, terminal, text):
         self.text = text
@@ -69,11 +92,11 @@ class Label:
         self.terminal = terminal
 
     def draw(self):
-        draw((self.pos, 0), self.text, self.channel, self.terminal)
+        draw(self.pos, self.text, self.channel, self.terminal)
 
 
 class Input:
-    pos = 0
+    pos = [0, 0]
 
     def __init__(self, channel, terminal, prompt, placeholder=UIText(""), hidden=False):
         self.prompt = prompt
@@ -112,13 +135,14 @@ class Input:
     def apply_format(self, text):
         apply = self.text.apply
         text = text.text
-        return apply(text[:self.cursor_pos]) + self.cursor + apply(text[self.cursor_pos:]) if self.active else apply(text)
+        return apply(text[:self.cursor_pos]) + self.cursor + apply(text[self.cursor_pos:]) if self.active else apply(
+            text)
 
     def draw(self):
         prompt = self.prompt
         text = self.apply_format(self.text)
 
-        draw((self.pos, 0), prompt + text, self.channel, self.terminal)
+        draw(self.pos, prompt + text, self.channel, self.terminal)
 
     def handle_input(self, data):
         if data == '\x1b[C':
@@ -159,17 +183,23 @@ class Layout:
             self.active_input_index = None
 
     def init(self):
-        i = 0
+        pos = [0, 0]
         for element in self.elements:
             if isinstance(element, Label):
-                element.pos = i
+                element.pos = pos
                 element.draw()
-            elif isinstance(element, Gap):
-                i += element.count - 1
+            elif isinstance(element, HGap):
+                pos[0] += element.count - 1
+            elif isinstance(element, VGap):
+                pos[1] += element.count + 1
+                pos[0] -= 1
+                continue
             elif isinstance(element, Input):
-                element.pos = i
+                element.pos = pos
                 element.draw()
-            i += 1
+
+            pos[0] += 1
+            pos[1] = 0
 
     def draw(self):
         for element in self.inputs:
@@ -191,6 +221,12 @@ class Layout:
                 self.activate(len(self.inputs) - 1)
         elif data == '\x1b':
             self.activate(-1)
+        elif mouse := parse_mouse_event(data):
+            if mouse['event_type'] == 'press':
+                for i, input_ in enumerate(self.inputs):
+                    if input_.pos[0] == mouse['y'] - 1:
+                        self.activate(i)
+                        break
         elif self.active_input_index is not None:
             self.inputs[self.active_input_index].handle_input(data)
 
@@ -213,9 +249,13 @@ class Layout:
                 value = ':'.join(value).strip()
                 key = key.strip()
                 if key == "padding-top":
-                    self.elements.append(Gap(int(value)))
+                    self.elements.append(HGap(int(value)))
                 elif key == "padding-bottom":
-                    appendings.append(Gap(int(value)))
+                    appendings.append(HGap(int(value)))
+                elif key == "padding-left":
+                    self.elements.append(VGap(int(value)))
+                elif key == "padding-right":
+                    appendings.append(VGap(int(value)))
                 elif key not in inspect.signature(field.__init__).parameters:
                     raise ValueError(f"Property {key} not found in {field}")
                 else:
@@ -250,4 +290,3 @@ class Layout:
         send(self.terminal.clear, self.channel)
         send(MOUSE_CLICK_DISABLE, self.channel)
         self.channel.close()
-
