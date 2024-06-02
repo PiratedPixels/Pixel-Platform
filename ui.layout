@@ -1,0 +1,20 @@
+Label {
+    text: "Welcome to the Pixel Platform! Please login to continue." | bold | red
+}
+
+Input {
+    prompt: "Username - " | rgb(122, 127, 255)
+    placeholder: "Enter your username"
+    padding-top: 1
+}
+
+Input {
+    prompt: "Password - " | blue
+    placeholder: "Enter your password"
+    hidden: True
+    padding-bottom: 1
+}
+
+Label {
+    text: "Press Q to Quit" | cyan
+}

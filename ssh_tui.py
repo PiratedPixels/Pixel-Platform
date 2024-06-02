@@ -99,15 +99,7 @@ def receive_input(chan, layout):
 
 def handle_client(chan):
     layout = Layout(chan, term)
-
-    layout.add_label(term.bold('Welcome to the Pixel Platform! Please login to continue.'), term.red)
-    layout.add_gap(1)
-
-    layout.add_input("Username - ", "Enter your username", prompt_format=term.color_rgb(122, 127, 255))
-    layout.add_input("Password - ", "Enter your password", hidden=True, prompt_format=term.blue)
-
-    layout.add_gap(1)
-    layout.add_label('Press Q to Quit', term.cyan)
+    layout.load_layout("ui.layout")
 
     layout.running = True
     Thread(target=receive_input, args=(chan, layout)).start()

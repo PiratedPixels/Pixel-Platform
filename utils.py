@@ -1,10 +1,13 @@
 import inspect
+import re
 import threading
 import time
 
 lock = threading.Lock()
 MOUSE_CLICK_ENABLE = "\x1b[?1000h\x1b[?1006h"
 MOUSE_CLICK_DISABLE = "\x1b[?1000l\x1b[?1006l"
+FIELD_PARSER = re.compile('^(.*? {\n.*?})$', re.DOTALL | re.MULTILINE)
+PROPS_PARSER = re.compile(r'\s*.*?\n')
 FPS = 20
 
 
@@ -16,7 +19,38 @@ def draw(pos, text, channel, terminal):
 
 
 def send(text, channel):
-    channel.send(text)
+    channel.send(str(text))
+
+
+class UIText:
+    def __init__(self, text):
+        self.text = text
+        self.colors = []
+
+    def __xor__(self, other):
+        self.colors.append(other)
+        return self
+
+    def __rxor__(self, other):
+        self.colors.insert(0, other)
+        return self
+
+    def apply(self, text):
+        for color in self.colors:
+            text = color(text)
+        return text
+
+    def __str__(self):
+        return self.apply(self.text)
+
+    def __repr__(self):
+        return f"UIText({repr(self.text)})"
+
+    def __add__(self, other):
+        return UIText(str(self) + other)
+
+    def __radd__(self, other):
+        return UIText(other + str(self))
 
 
 class Gap:
@@ -29,28 +63,22 @@ class Gap:
 class Label:
     pos = 0
 
-    def __init__(self, text, color, channel, terminal):
+    def __init__(self, channel, terminal, text):
         self.text = text
-        self.color = color
         self.channel = channel
         self.terminal = terminal
 
     def draw(self):
-        fg_text = self.text
-        if self.color and fg_text:
-            fg_text = self.color(self.text)
-        draw((self.pos, 0), fg_text, self.channel, self.terminal)
+        draw((self.pos, 0), self.text, self.channel, self.terminal)
 
 
-class TextInput:
+class Input:
     pos = 0
 
-    def __init__(self, prompt, placeholder, hidden, prompt_format, placeholder_format, channel, terminal):
+    def __init__(self, channel, terminal, prompt, placeholder=UIText(""), hidden=False):
         self.prompt = prompt
         self.placeholder = placeholder
         self.hidden = hidden
-        self.prompt_format = prompt_format
-        self.placeholder_format = placeholder_format
         self.channel = channel
         self.terminal = terminal
 
@@ -79,20 +107,16 @@ class TextInput:
     def text(self):
         if not self._text:
             return self.placeholder
-        return '*' * len(self._text) if self.hidden else "".join(self._text)
+        return UIText('*' * len(self._text) if self.hidden else "".join(self._text))
 
     def apply_format(self, text):
-        format_ = self.placeholder_format
-        return format_(text[:self.cursor_pos]) + self.cursor + format_(text[self.cursor_pos:]) if self.active else format_(text)
+        apply = self.text.apply
+        text = text.text
+        return apply(text[:self.cursor_pos]) + self.cursor + apply(text[self.cursor_pos:]) if self.active else apply(text)
 
     def draw(self):
-        prompt = self.placeholder
-        if self.prompt_format and prompt:
-            prompt = self.prompt_format(self.prompt)
-
-        text = self.text
-        if self.placeholder_format and text:
-            text = self.apply_format(text)
+        prompt = self.prompt
+        text = self.apply_format(self.text)
 
         draw((self.pos, 0), prompt + text, self.channel, self.terminal)
 
@@ -122,26 +146,6 @@ class Layout:
         self.inputs = []
         self.active_input_index = None
 
-    def add_label(self, text, color=None):
-        label = Label(text, color, self.channel, self.terminal)
-        self.elements.append(label)
-        return label
-
-    def add_gap(self, size):
-        gap = Gap(size)
-        self.elements.append(gap)
-        return gap
-
-    def add_input(self, prompt, placeholder, hidden=False, prompt_format=None, placeholder_format=None):
-        if placeholder_format is None:
-            placeholder_format = self.terminal.lightcyan4
-        elm = TextInput(prompt, placeholder, hidden, prompt_format, placeholder_format, self.channel, self.terminal)
-        self.elements.append(elm)
-        self.inputs.append(elm)
-        if len(self.inputs) == 1:
-            self.activate(0)
-        return elm
-
     def activate(self, index):
         if self.active_input_index is not None:
             self.inputs[self.active_input_index].active = False
@@ -161,7 +165,7 @@ class Layout:
                 element.draw()
             elif isinstance(element, Gap):
                 i += element.count - 1
-            elif isinstance(element, TextInput):
+            elif isinstance(element, Input):
                 element.pos = i
                 element.draw()
             i += 1
@@ -188,6 +192,51 @@ class Layout:
             self.activate(-1)
         elif self.active_input_index is not None:
             self.inputs[self.active_input_index].handle_input(data)
+
+    def load_layout(self, layout_file):
+        with open(layout_file, 'r') as f:
+            layout = f.read()
+
+        fields = FIELD_PARSER.findall(layout)
+        for field in fields:
+            props = *map(str.strip, PROPS_PARSER.findall(field.strip())),
+            field = props[0].split()[0]
+            if field not in globals():
+                raise ValueError(f"Field {field} not found")
+            field = globals()[field]
+            kwargs = {}
+            appendings = []
+
+            for prop in props[1:]:
+                key, *value = prop.split(':')
+                value = ':'.join(value).strip()
+                key = key.strip()
+                if key == "padding-top":
+                    self.elements.append(Gap(int(value)))
+                elif key == "padding-bottom":
+                    appendings.append(Gap(int(value)))
+                elif key not in inspect.signature(field.__init__).parameters:
+                    raise ValueError(f"Property {key} not found in {field}")
+                else:
+                    values = value.split("|")
+                    value = eval(values[0])
+                    if isinstance(value, str):
+                        value = UIText(value)
+                        for color in values[1:]:
+                            color = eval(f"self.terminal.{color.strip()}", globals(), locals())
+                            value ^= color
+                    kwargs[key] = value
+
+            elm = field(self.channel, self.terminal, **kwargs)
+            self.elements.append(elm)
+            self.elements.extend(appendings)
+
+            if isinstance(elm, Input):
+                if not elm.placeholder.colors:
+                    elm.placeholder.colors.append(self.terminal.lightcyan4)
+                self.inputs.append(elm)
+                if len(self.inputs) == 1:
+                    self.activate(0)
 
     def __enter__(self):
         send(self.terminal.clear, self.channel)
