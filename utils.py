@@ -149,6 +149,10 @@ class Input(Displayable):
         return len(self.prompt) + len(self.text) + 1
 
     @property
+    def raw(self):
+        return "".join(self._text)
+
+    @property
     def cursor(self):
         self._cursor += 1
         self._cursor %= FPS
@@ -264,7 +268,7 @@ class Layout:
             if self.active_input_index is not None:
                 self.activate(self.active_input_index + 1)
             else:
-                self.activate(0)
+                self.click_handler(self, self.named_elements["enter"])
         elif data == '\x1b[A':
             if self.active_input_index is not None:
                 self.activate(self.active_input_index - 1)

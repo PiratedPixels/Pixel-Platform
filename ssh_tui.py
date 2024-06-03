@@ -99,7 +99,10 @@ def click_handler(layout, elm):
         else:
             layout.handle_input("\x1b")
     elif elm.id == "enter":
-        layout.handle_input("")
+        if layout.active_input_index is not None:
+            layout.handle_input("")
+        else:
+            print("Logged in with {} and {}".format(layout.named_elements["username"].raw, layout.named_elements["password"].raw))
 
 
 def handle_client(chan):
