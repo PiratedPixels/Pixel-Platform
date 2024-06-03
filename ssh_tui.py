@@ -77,11 +77,33 @@ def receive_input(chan, layout):
         if data.strip().lower() == "q" and layout.active_input_index is None:
             layout.running = False
             break
+
         layout.handle_input(data)
 
 
+def postcheck(layout):
+    if layout.active_input_index is not None:
+        layout.named_elements["enter"].text = "Press Enter to Continue"
+        layout.named_elements["exit"].text = "Press Esc to Stop Typing"
+    else:
+        layout.named_elements["enter"].text = "Press Enter to Login"
+        layout.named_elements["exit"].text = "Press Q to Exit"
+
+
+def click_handler(layout, elm):
+    if not hasattr(elm, "id"):
+        return
+    if elm.id == "exit":
+        if layout.active_input_index is None:
+            layout.handle_input("q")
+        else:
+            layout.handle_input("\x1b")
+    elif elm.id == "enter":
+        layout.handle_input("")
+
+
 def handle_client(chan):
-    layout = Layout(chan, term)
+    layout = Layout(chan, term, postcheck, click_handler)
     layout.load_layout("ui.layout")
 
     layout.running = True

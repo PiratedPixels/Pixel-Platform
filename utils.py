@@ -11,6 +11,8 @@ FIELD_PARSER = re.compile('^(.*? {\n.*?})$', re.DOTALL | re.MULTILINE)
 PROPS_PARSER = re.compile(r'\s*.*?\n')
 FPS = 20
 
+DummyF = lambda *a, **kw: None
+
 
 def draw(pos, text, channel, terminal):
     with lock:
@@ -105,9 +107,21 @@ class Label(Displayable):
     pos = [0, 0]
 
     def __init__(self, channel, terminal, text):
-        self.text = text
+        self._text = text
         self.channel = channel
         self.terminal = terminal
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        if isinstance(value, UIText):
+            self._text = value
+        else:
+            self._text.text = value
+        self.draw()
 
     def draw(self):
         draw(self.pos, self.text, self.channel, self.terminal)
@@ -186,11 +200,14 @@ class Input(Displayable):
 
 
 class Layout:
-    def __init__(self, channel, terminal):
+    def __init__(self, channel, terminal, postcheck=DummyF, click_handler=DummyF):
         self.channel = channel
         self.terminal = terminal
-        self.elements = []
+        self.postcheck = postcheck
+        self.click_handler = click_handler
 
+        self.elements = []
+        self.named_elements = {}
         self.inputs = []
         self.active_input_index = None
 
@@ -261,8 +278,16 @@ class Layout:
                     if input_.pos[0] == mouse['y'] - 1:
                         self.activate(i)
                         break
+                else:
+                    for elm in self.elements:
+                        if isinstance(elm, Label):
+                            if elm.pos[0] == mouse['y'] - 1 and elm.pos[1] < mouse['x'] <= elm.pos[1]+len(elm):
+                                self.click_handler(self, elm)
+                                break
         elif self.active_input_index is not None:
             self.inputs[self.active_input_index].handle_input(data)
+
+        self.postcheck(self)
 
     def load_layout(self, layout_file):
         with open(layout_file, 'r') as f:
@@ -277,6 +302,7 @@ class Layout:
             field = globals()[field]
             kwargs = {}
             appendings = []
+            elm_id = None
 
             for prop in props[1:]:
                 key, *value = prop.split(':')
@@ -295,8 +321,15 @@ class Layout:
                 elif key == "margin-right":
                     appendings.append(VPos(int(value)))
                 elif key == "inline":
-                    if value:
+                    if value == "true":
                         self.elements.append(UnBreak())
+                    elif value != "false":
+                        raise ValueError(f"Invalid value {value} for property {key}")
+                elif key == "id":
+                    if value in self.named_elements:
+                        raise ValueError(f"Element with id {value} already exists")
+                    elm_id = value
+                    continue
                 elif key not in inspect.signature(field.__init__).parameters:
                     raise ValueError(f"Property {key} not found in {field}")
                 else:
@@ -312,6 +345,10 @@ class Layout:
             elm = field(self.channel, self.terminal, **kwargs)
             self.elements.append(elm)
             self.elements.extend(appendings)
+
+            if elm_id:
+                elm.id = elm_id
+                self.named_elements[elm_id] = elm
 
             if isinstance(elm, Input):
                 if not elm.placeholder.colors:
